@@ -1,0 +1,20 @@
+{
+	"manifest_version": 2,
+	"name": "Local File Operator for wasavi",
+	"description": "Library application to operate local files for wasavi",
+	"version": "1.0.0",
+	"icons": {
+		"16": "icon016.png",
+		"48": "icon048.png",
+		"128": "icon128.png"
+	},
+	"app": {
+		"background": {
+			"scripts": ["background.js"]
+		}
+	},
+	"permissions": [
+		"storage",
+		{"fileSystem": ["write", "retainEntries", "directory"]}
+	]
+}
