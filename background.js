@@ -90,6 +90,7 @@ chrome.runtime.onMessageExternal.addListener(function handleMessageExternal (mes
 
 		response({error: message});
 		response = null;
+		console.error(message);
 	}
 
 	if (ACCEPT_IDS.indexOf(sender.id) < 0) {
@@ -105,40 +106,67 @@ chrome.runtime.onMessageExternal.addListener(function handleMessageExternal (mes
 			return error('Missing path');
 		}
 
+		var path = messageExternal.path.replace(/^\//, '');
+
 		switch (messageExternal.command) {
 		case 'read':
-			directoryEntry.getFile(messageExternal.path, {}, function gotReadFileEntry (fileEntry) {
+			/*
+			 * request object: {
+			 *     command:  'read',
+			 *     path:     '/path/to/file',
+			 *     type:     'arraybuffer' OR-ELSE  [optional]
+			 *     encoding: 'encoding name',       [optional]
+			 * }
+			 *
+			 * response object: {
+			 *     path:    '/path/to/file',
+			 *     name:    'basename-of-this-file',
+			 *     content: CONTENT, <STRING> OR <ARRAYBUFFER>
+			 * }
+			 */
+
+			directoryEntry.getFile(path, {}, function gotReadFileEntry (fileEntry) {
 				fileEntry.file(function gotFile (file) {
 					var reader = new FileReader;
 
 					reader.onloadend = function loadend (e) {
 						function gotMetadata (metadata) {
-							var decoder;
 							try {
-								decoder = new TextDecoder(messageExternal.encoding || 'UTF-8');
+								var payload = {
+									path: path,
+									name: fileEntry.name,
+									content: reader.result
+								};
+
+								if (messageExternal.type != 'arraybuffer') {
+									var decoder;
+									try {
+										decoder = new TextDecoder(messageExternal.encoding || 'UTF-8');
+									}
+									catch (ex) {
+										return error('Unknown encoding: ' + messageExternal.encoding);
+									}
+									payload.content = decoder.decode(payload.content);
+								}
+
+								if (!(metadata instanceof DOMError)) {
+									if ('modificationTime' in metadata) {
+										payload.lastModified = metadata.modificationTime.getTime();
+									}
+
+									if ('size' in metadata) {
+										payload.size = metadata.size;
+									}
+								}
+
+								response(payload);
 							}
 							catch (ex) {
-								return error('Unknown encoding: ' + messageExternal.encoding);
+								error('Exception occured: ' + ex.message);
 							}
-
-							var payload = {
-								path: fileEntry.fullPath,
-								name: fileEntry.name,
-								content: decoder.decode(reader.payload)
-							};
-
-							if (!(metadata instanceof DOMError)) {
-								if ('modificationTime' in metadata) {
-									payload.lastModified = metadata.modificationTime.getTime();
-								}
-
-								if ('size' in metadata) {
-									payload.size = metadata.size;
-								}
+							finally {
+								reader = response = null;
 							}
-
-							response(payload);
-							reader = response = null;
 						}
 
 						fileEntry.getMetadata(gotMetadata, gotMetadata);
@@ -161,18 +189,40 @@ chrome.runtime.onMessageExternal.addListener(function handleMessageExternal (mes
 			break;
 
 		case 'write':
-			directoryEntry.getFile(messageExternal.path, {create: true}, function gotWriteFileEntry (fileEntry) {
+			/*
+			 * request object: {
+			 *     command:  'write',
+			 *     path:     '/path/to/file',
+			 *     content:  <STRING> OR <ARRAYBUFFER>,
+			 *     encoding: 'encoding name'        [optional]
+			 * }
+			 *
+			 * response object: {
+			 *     path:    '/path/to/file',
+			 *     name:    'basename-of-this-file',
+			 *     content: SIZE IN BYTES, <NUMBER>
+			 * }
+			 */
+
+			directoryEntry.getFile(path, {create: true}, function gotWriteFileEntry (fileEntry) {
 				fileEntry.createWriter(function gotWriter (writer) {
 					writer.onwriteend = function writeend (e) {
-						writer.onwriteend = null;
-						writer.truncate(e.total);
+						try {
+							writer.onwriteend = null;
+							writer.truncate(e.total);
 
-						response({
-							path: fileEntry.fullPath,
-							name: fileEntry.name,
-							size: e.total
-						});
-						writer = response = null;
+							response({
+								path: path,
+								name: fileEntry.name,
+								size: e.total
+							});
+						}
+						catch (ex) {
+							error('Exception occured: ' + ex.message);
+						}
+						finally {
+							writer = response = null;
+						}
 					};
 
 					writer.onerror = function writeerror (e) {
@@ -180,15 +230,20 @@ chrome.runtime.onMessageExternal.addListener(function handleMessageExternal (mes
 						writer = null;
 					};
 
-					var encoder;
-					try {
-						encoder = new TextEncoder(messageExternal.encoding || 'UTF-8');
+					if (messageExternal instanceof ArrayBuffer) {
+						writer.write(new Blob([messageExternal.content]));
 					}
-					catch (ex) {
-						return error('Unknown encoding');
-					}
+					else {
+						var encoder;
+						try {
+							encoder = new TextEncoder(messageExternal.encoding || 'UTF-8');
+						}
+						catch (ex) {
+							return error('Unknown encoding: ' + messageExternal.encoding);
+						}
 
-					writer.write(new Blob([encoder.encode(messageExternal.content)]));
+						writer.write(new Blob([encoder.encode(messageExternal.content)]));
+					}
 				},
 				function gotWriterError (err) {
 					error('Failed to retrieve file writer object: ' + err.message);
@@ -199,9 +254,87 @@ chrome.runtime.onMessageExternal.addListener(function handleMessageExternal (mes
 			});
 			break;
 
-		default:
-			error('Unknown command: "' + messageExternal.command + '"');
+		case 'ls':
+			/*
+			 * request object: {
+			 *     command:  'ls',
+			 *     path:     '/path/to/directory'
+			 * }
+			 *
+			 * response object: {
+			 *     path:    '/path/to/directory',
+			 *     name:    'basename-of-this-directory',
+			 *     entries: [
+			 *         {
+			 *             name:       'basename-of-this-file',,
+			 *             size:       '',
+			 *             bytes:      <NUMBER>,
+			 *             path:       '/path/to/file',
+			 *             is_dir:     <BOOLEAN>
+			 *             is_deleted: false,
+			 *             id:         null,
+			 *             modified:   null,
+			 *             created:    null,
+			 *             mime_type:  'application/octet-stream'
+			 *         }, ...
+			 *     ]
+			 * }
+			 */
+
+			directoryEntry.getDirectory(path, {}, function gotDirectoryEntry (dirEntry) {
+				var reader = dirEntry.createReader();
+				var entries = [];
+
+				function readEntries () {
+					reader.readEntries(function (subEntries) {
+						if (subEntries.length) {
+							entries.push.apply(entries, subEntries);
+							return readEntries();
+						}
+
+						try {
+							entries = entries.sort(function (a, b) {
+								return a.name.localeCompare(b.name);
+							})
+							.map(function (entry) {
+								return {
+									name:       entry.name,
+									size:       '',
+									bytes:      0,
+									path:       ('/' + path + '/' + entry.name).replace(/\/{2,}/, '/'),
+									is_dir:     entry.isDirectory,
+									is_deleted: false,
+									id:         null,
+									modified:   null,
+									created:    null,
+									mime_type:  'application/octet-stream'
+								};
+							});
+
+							response({
+								path: path,
+								name: dirEntry.name,
+								entries: entries
+							});
+						}
+						catch (ex) {
+							error('Exception occured: ' + ex.message);
+						}
+						finally {
+							reader = response = null;
+						}
+					});
+				}
+
+				readEntries();
+			},
+			function gotDirectoryEntryError (err) {
+				error('Failed to open the directory: ' + err.message);
+			});
 			break;
+
+		default:
+			return error('Unknown command: "' + messageExternal.command + '"');
 		}
 	});
 
@@ -212,6 +345,7 @@ chrome.runtime.onMessageExternal.addListener(function handleMessageExternal (mes
  * unused handlers
  */
 
+/*
 chrome.app.runtime.onRestarted.addListener(function () {
 	console.log('chrome.app.runtime.onRestarted fired');
 });
@@ -239,6 +373,7 @@ chrome.runtime.onConnectExternal.addListener(function (port) {
 chrome.runtime.onMessage.addListener(function (message, sender, response) {
 	console.log('chrome.runtime.onMessage fired');
 });
+*/
 
 })(this);
 
