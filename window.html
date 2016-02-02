@@ -52,13 +52,36 @@ h2 {
 	font-family:monospace;
 	font-size:x-large;
 }
+.test-row {
+	margin: 0 0 4px 0;
+}
+#t1 {
+	box-sizing:border-box;
+	width:100%;
+}
+#t2 {
+	box-sizing:border-box;
+	width:100%;
+}
+#message {
+	margin:4px 0 0 0;
+	font-size:medium;
+	color:blue;
+}
 		</style>
 	</head>
 	<body>
 		<h1>Local File Operator for wasavi</h1>
-		<h2>Current root path:</h2>
+		<h2>Root path:</h2>
 		<div id="d1">N/A</div>
 		<button id="b1">Change...</button>
+		<!--
+		<hr>
+		<div class="test-row"><label for="t1">path:</label><input id="t1" value="/home/akahuku/lfo-test.txt"></div>
+		<div class="test-row"><textarea id="t2"></textarea></div>
+		<button id="button-save">save</button> <button id="button-load">load</button>
+		-->
+		<div class="message" id="message"></div>
 		<script type="text/javascript" src="window.js"></script>
 	</body>
 </html>

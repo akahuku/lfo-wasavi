@@ -82,7 +82,7 @@ chrome.app.runtime.onLaunched.addListener(function handleLaunched (data) {
  * API entry
  */
 
-chrome.runtime.onMessageExternal.addListener(function handleMessageExternal (messageExternal, sender, response) {
+function API (message, response) {
 	function error (message) {
 		if (chrome.runtime.lastError) {
 			message += ' (' + chrome.runtime.lastError.message + ')';
@@ -93,22 +93,18 @@ chrome.runtime.onMessageExternal.addListener(function handleMessageExternal (mes
 		console.error(message);
 	}
 
-	if (ACCEPT_IDS.indexOf(sender.id) < 0) {
-		return error('Forbidden');
-	}
-
 	getBasePath(function gotBasePath (directoryEntry) {
 		if (!directoryEntry) {
 			return error('Missing root directory');
 		}
 
-		if (!'path' in messageExternal) {
+		if (!'path' in message) {
 			return error('Missing path');
 		}
 
-		var path = messageExternal.path.replace(/^\//, '');
+		var path = message.path.replace(/^\//, '');
 
-		switch (messageExternal.command) {
+		switch (message.command) {
 		case 'read':
 			/*
 			 * request object: {
@@ -138,13 +134,13 @@ chrome.runtime.onMessageExternal.addListener(function handleMessageExternal (mes
 									content: reader.result
 								};
 
-								if (messageExternal.type != 'arraybuffer') {
+								if (message.type != 'arraybuffer') {
 									var decoder;
 									try {
-										decoder = new TextDecoder(messageExternal.encoding || 'UTF-8');
+										decoder = new TextDecoder(message.encoding || 'UTF-8');
 									}
 									catch (ex) {
-										return error('Unknown encoding: ' + messageExternal.encoding);
+										return error('Unknown encoding: ' + message.encoding);
 									}
 									payload.content = decoder.decode(payload.content);
 								}
@@ -230,19 +226,19 @@ chrome.runtime.onMessageExternal.addListener(function handleMessageExternal (mes
 						writer = null;
 					};
 
-					if (messageExternal instanceof ArrayBuffer) {
-						writer.write(new Blob([messageExternal.content]));
+					if (message instanceof ArrayBuffer) {
+						writer.write(new Blob([message.content]));
 					}
 					else {
 						var encoder;
 						try {
-							encoder = new TextEncoder(messageExternal.encoding || 'UTF-8');
+							encoder = new TextEncoder(message.encoding || 'UTF-8');
 						}
 						catch (ex) {
-							return error('Unknown encoding: ' + messageExternal.encoding);
+							return error('Unknown encoding: ' + message.encoding);
 						}
 
-						writer.write(new Blob([encoder.encode(messageExternal.content)]));
+						writer.write(new Blob([encoder.encode(message.content)]));
 					}
 				},
 				function gotWriterError (err) {
@@ -334,15 +330,32 @@ chrome.runtime.onMessageExternal.addListener(function handleMessageExternal (mes
 			break;
 
 		default:
-			return error('Unknown command: "' + messageExternal.command + '"');
+			return error('Unknown command: "' + message.command + '"');
 		}
 	});
 
 	return true;
+}
+
+/*
+ * message event handlers
+ */
+
+chrome.runtime.onMessageExternal.addListener(function (messageExternal, sender, response) {
+	if (ACCEPT_IDS.indexOf(sender.id) < 0) {
+		response({error: 'Forbidden'});
+		return;
+	}
+
+	return API(messageExternal, response);
+});
+
+chrome.runtime.onMessage.addListener(function (message, sender, response) {
+	return API(message, response);
 });
 
 /*
- * unused handlers
+ * unused event handlers
  */
 
 /*
@@ -370,9 +383,6 @@ chrome.runtime.onConnectExternal.addListener(function (port) {
 	console.log('chrome.runtime.onConnectExternal fired');
 });
 
-chrome.runtime.onMessage.addListener(function (message, sender, response) {
-	console.log('chrome.runtime.onMessage fired');
-});
 */
 
 })(this);

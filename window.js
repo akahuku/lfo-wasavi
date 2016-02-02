@@ -33,6 +33,22 @@ function displayPath (dir) {
 	});
 }
 
+var timer;
+function setMessage (message) {
+	if (timer) {
+		clearTimeout(timer);
+		timer = null;
+	}
+
+	var div = document.getElementById('message');
+	if (!div) return;
+
+	div.textContent = message;
+	timer = setTimeout(function () {
+		div.textContent = '';
+	}, 5000);
+}
+
 document.getElementById('b1').addEventListener('click', function (e) {
 	chrome.fileSystem.chooseEntry(
 		{type: 'openDirectory'},
@@ -47,9 +63,36 @@ document.getElementById('b1').addEventListener('click', function (e) {
 			})
 
 			displayPath(entry);
+			setMessage('"' + entry.fullPath + '" has been registered as root directory of wasavi.');
 		}
 	);
 }, false);
+
+/*
+document.getElementById('button-save').addEventListener('click', function (e) {
+}, false);
+
+document.getElementById('button-load').addEventListener('click', function (e) {
+	chrome.runtime.sendMessage(
+		{
+			command: 'read',
+			path: document.getElementById('t1').value,
+			encoding:'UTF-8'
+		},
+		function (response) {
+			if (!response) {
+				setMessage('response is invalid.');
+				return;
+			}
+			if (response.error) {
+				setMessage('error: ' + response.error);
+				return;
+			}
+			document.getElementById('t2').value = response.content;
+		}
+	);
+}, false);
+ */
 
 chrome.runtime.getBackgroundPage(function (bg) {
 	bg.getBasePath(function (entry) {
