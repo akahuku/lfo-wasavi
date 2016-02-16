@@ -54,7 +54,7 @@ document.getElementById('b1').addEventListener('click', function (e) {
 		{type: 'openDirectory'},
 		function (entry) {
 			if (!entry) {
-				alert(chrome.runtime.lastError.message);
+				setMessage(chrome.runtime.lastError.message);
 				return;
 			}
 
@@ -63,7 +63,10 @@ document.getElementById('b1').addEventListener('click', function (e) {
 			})
 
 			displayPath(entry);
-			setMessage('"' + entry.fullPath + '" has been registered as root directory of wasavi.');
+
+			setMessage(
+				'"' + entry.fullPath + '"' +
+				' has been registered as root directory of wasavi.');
 		}
 	);
 }, false);
