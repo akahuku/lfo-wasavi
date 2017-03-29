@@ -1,0 +1,40 @@
+{
+	"title": {
+		"message": "LFO - Local File Operator Library"
+	},
+	"description": {
+		"message": "Library application which provides an API to operate local files"
+	},
+	"base_path": {
+		"message": "The local directory to export to Chrome browser:"
+	},
+	"na": {
+		"message": "N/A"
+	},
+	"change": {
+		"message": "Change..."
+	},
+	"base_path_notice": {
+		"message": "Please select the directory to export to Chrome.  This directory becomes the root in the application.  Basically, this should be assigned your home directory itself or any subfolder within your home directory."
+	},
+	"home_path": {
+		"message": "The absolute path to your home directory"
+	},
+	"update": {
+		"message": "Update"
+	},
+	"home_path_notice": {
+		"message": "Please input the absolute path to your home directory.  It is a string like:"
+	},
+	"base_path_updated": {
+		"message": "\"$fullpath$\" has been registered as root directory.",
+		"placeholders": {
+			"fullpath": {
+				"content": "$1"
+			}
+		}
+	},
+	"home_path_updated": {
+		"message": "Path to your home directory has been updated."
+	}
+}

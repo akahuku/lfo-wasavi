@@ -1,0 +1,40 @@
+{
+	"title": {
+		"message": "LFO - ローカルファイル操作ライブラリ"
+	},
+	"description": {
+		"message": "ローカルファイルを操作するための API を提供するライブラリアプリケーション"
+	},
+	"base_path": {
+		"message": "Chrome ブラウザへ公開するローカルディレクトリ:"
+	},
+	"na": {
+		"message": "なし"
+	},
+	"change": {
+		"message": "変更..."
+	},
+	"base_path_notice": {
+		"message": "Chrome へ公開するディレクトリを選択してください。このディレクトリがアプリケーションにおけるルートになります。基本的にはあなたのホームディレクトリ、またはホームディレクトリ内の任意のサブフォルダを指定します。"
+	},
+	"home_path": {
+		"message": "あなたのホームディレクトリへの絶対パス"
+	},
+	"update": {
+		"message": "更新"
+	},
+	"home_path_notice": {
+		"message": "あなたのホームディレクトリへの絶対パスを入力してください。例えば以下のような文字列です:"
+	},
+	"base_path_updated": {
+		"message": "\"$fullpath$\" がルートディレクトリとして登録されました。",
+		"placeholders": {
+			"fullpath": {
+				"content": "$1"
+			}
+		}
+	},
+	"home_path_updated": {
+		"message": "ホームディレクトリへのパスが更新されました。"
+	}
+}

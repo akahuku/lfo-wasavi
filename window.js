@@ -6,7 +6,7 @@
  * @author akahuku@gmail.com
  */
 /**
- * Copyright 2016 akahuku, akahuku@gmail.com
+ * Copyright 2016-2017 akahuku, akahuku@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,12 +25,17 @@
 
 'use strict';
 
-function displayPath (dir) {
-	chrome.fileSystem.getDisplayPath(dir, function (path) {
+function displayRootPath (dir) {
+	chrome.fileSystem.getDisplayPath(dir, path => {
 		var d1 = document.getElementById('d1');
 		d1.textContent = path;
 		d1.style.color = '#000';
 	});
+}
+
+function displayHomePath (path) {
+	var t3 = document.getElementById('t3');
+	t3.value = path;
 }
 
 var timer;
@@ -44,31 +49,34 @@ function setMessage (message) {
 	if (!div) return;
 
 	div.textContent = message;
-	timer = setTimeout(function () {
+	timer = setTimeout(() => {
 		div.textContent = '';
 	}, 5000);
 }
 
-document.getElementById('b1').addEventListener('click', function (e) {
-	chrome.fileSystem.chooseEntry(
-		{type: 'openDirectory'},
-		function (entry) {
-			if (!entry) {
-				setMessage(chrome.runtime.lastError.message);
-				return;
-			}
-
-			chrome.runtime.getBackgroundPage(function (bg) {
-				bg.setBasePath(entry);
-			})
-
-			displayPath(entry);
-
-			setMessage(
-				'"' + entry.fullPath + '"' +
-				' has been registered as root directory of wasavi.');
+document.getElementById('b1').addEventListener('click', e => {
+	chrome.fileSystem.chooseEntry({type: 'openDirectory'}, entry => {
+		if (!entry) {
+			setMessage(chrome.runtime.lastError.message);
+			return;
 		}
-	);
+
+		chrome.runtime.getBackgroundPage(bg => {
+			bg.setBasePath(entry);
+		})
+
+		displayRootPath(entry);
+
+		setMessage(chrome.i18n.getMessage('base_path_updated', entry.fullPath));
+	});
+}, false);
+
+document.getElementById('b2').addEventListener('click', e => {
+	chrome.runtime.getBackgroundPage(bg => {
+		bg.setHomePath(document.getElementById('t3').value);
+
+		setMessage(chrome.i18n.getMessage('home_path_updated'));
+	})
 }, false);
 
 /*
@@ -97,12 +105,29 @@ document.getElementById('button-load').addEventListener('click', function (e) {
 }, false);
  */
 
-chrome.runtime.getBackgroundPage(function (bg) {
-	bg.getBasePath(function (entry) {
+chrome.runtime.getBackgroundPage(bg => {
+	bg.getBasePath((entry, homePath) => {
+		console.dir(entry);
+		console.dir(homePath);
 		if (entry) {
-			displayPath(entry);
+			displayRootPath(entry);
+		}
+		if (homePath) {
+			displayHomePath(homePath);
 		}
 	});
+});
+
+Array.prototype.forEach.call(document.querySelectorAll('[data-i18n]'), node => {
+	var key = node.dataset.i18n;
+	var localized = chrome.i18n.getMessage(key);
+	if (typeof localized == 'string' && localized != '') {
+		node.textContent = localized;
+	}
+});
+
+document.addEventListener('DOMContentLoaded', e => {
+	document.body.style.visibility = 'visible';
 });
 
 })(this);

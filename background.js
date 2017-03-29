@@ -6,7 +6,7 @@
  * @author akahuku@gmail.com
  */
 /**
- * Copyright 2016 akahuku, akahuku@gmail.com
+ * Copyright 2017 akahuku, akahuku@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,9 +25,11 @@
 
 'use strict';
 
-var ACCEPT_IDS = [
+const ACCEPT_IDS = [
 	'dgogifpkoilgiofhhhodbodcfgomelhe',	// wasavi release version
-	'ebphjmhbacdkdgfchhjmhailogkehfob'	// wasavi develop version
+	'ebphjmhbacdkdgfchhjmhailogkehfob',	// wasavi develop version
+										// kokoni release version
+	'oakajieejajdhkjajeppjefenobcnklp'	// kokoni develop version
 ];
 
 /*
@@ -40,39 +42,48 @@ function setBasePath (directoryEntry) {
 }
 
 function getBasePath (callback) {
-	chrome.storage.local.get('basePath', function (values) {
-		if (values && 'basePath' in values) {
-			chrome.fileSystem.restoreEntry(values.basePath, function (directoryEntry) {
-				if (chrome.runtime.lastError) {
-					console.error(
-						'getBasePath: restoring id (' + values.basePath + ') failed: ' + chrome.runtime.lastError.message);
-					callback(undefined);
-				}
-				else {
-					callback(directoryEntry);
-				}
-			});
-		}
-		else {
-			callback(undefined);
-		}
+	chrome.storage.local.get({
+		basePath: '',
+		homePath: ''
+	}, values => {
+		chrome.fileSystem.restoreEntry(values.basePath, directoryEntry => {
+			if (chrome.runtime.lastError) {
+				console.error(
+					`getBasePath: restoring id (${values.basePath}) failed: ${chrome.runtime.lastError.message}`);
+				callback();
+			}
+			else {
+				callback(directoryEntry, values.homePath);
+			}
+		});
 	});
+}
+
+function setHomePath (path) {
+	path = path.replace(/\\/g, '/');
+
+	if (path != '' && path.substr(-1) != '/') {
+		path += '/';
+	}
+
+	chrome.storage.local.set({'homePath': path});
 }
 
 global.setBasePath = setBasePath;
 global.getBasePath = getBasePath;
+global.setHomePath = setHomePath;
 
 /*
  * launch handler
  */
 
-chrome.app.runtime.onLaunched.addListener(function handleLaunched (data) {
+chrome.app.runtime.onLaunched.addListener(data => {
 	chrome.app.window.create(
 		'window.html',
 		{
-			'outerBounds': {
-				'width': 800,
-				'height': 400
+			outerBounds: {
+				width: 800,
+				height: 400
 			}
 		}
 	);
@@ -85,7 +96,7 @@ chrome.app.runtime.onLaunched.addListener(function handleLaunched (data) {
 function API (message, response) {
 	function error (message) {
 		if (chrome.runtime.lastError) {
-			message += ' (' + chrome.runtime.lastError.message + ')';
+			message += ` (${chrome.runtime.lastError.message})`;
 		}
 
 		response({error: message});
@@ -93,16 +104,18 @@ function API (message, response) {
 		console.error(message);
 	}
 
-	getBasePath(function gotBasePath (directoryEntry) {
+	function getPath (path) {
+		return path.replace(/^\//, '');
+	}
+
+	getBasePath(function gotBasePath (directoryEntry, homePath) {
 		if (!directoryEntry) {
 			return error('Missing root directory');
 		}
 
-		if (!'path' in message) {
-			return error('Missing path');
+		if (!homePath) {
+			return error('Missing home path');
 		}
-
-		var path = message.path.replace(/^\//, '');
 
 		switch (message.command) {
 		case 'read':
@@ -120,6 +133,12 @@ function API (message, response) {
 			 *     content: CONTENT, <STRING> OR <ARRAYBUFFER>
 			 * }
 			 */
+
+			if (!('path' in message)) {
+				return error('Missing path');
+			}
+
+			var path = getPath(message.path);
 
 			directoryEntry.getFile(path, {}, function gotReadFileEntry (fileEntry) {
 				fileEntry.file(function gotFile (file) {
@@ -140,7 +159,7 @@ function API (message, response) {
 										decoder = new TextDecoder(message.encoding || 'UTF-8');
 									}
 									catch (ex) {
-										return error('Unknown encoding: ' + message.encoding);
+										return error(`Unknown encoding: ${message.encoding}`);
 									}
 									payload.content = decoder.decode(payload.content);
 								}
@@ -158,7 +177,7 @@ function API (message, response) {
 								response(payload);
 							}
 							catch (ex) {
-								error('Exception occured: ' + ex.message);
+								error(`Exception occured: ${ex.message}`);
 							}
 							finally {
 								reader = response = null;
@@ -169,18 +188,18 @@ function API (message, response) {
 					};
 
 					reader.onerror = function loaderror (err) {
-						error('Failed to read: ' + err.message);
+						error(`Failed to read: ${err.message}`);
 						reader = null;
 					};
 
 					reader.readAsArrayBuffer(file);
 				},
 				function gotFileError (err) {
-					error('Failed to retrieve file representation object: ' + err.message);
+					error(`Failed to retrieve file representation object: ${err.message}`);
 				});
 			},
 			function gotReadFileEntryError (err) {
-				error('Failed to read: ' + err.message);
+				error(`Failed to read: ${err.message}`);
 			});
 			break;
 
@@ -200,6 +219,15 @@ function API (message, response) {
 			 * }
 			 */
 
+			if (!('path' in message)) {
+				return error('Missing path');
+			}
+			if (!('content' in message)) {
+				return error('Missing content');
+			}
+
+			var path = getPath(message.path);
+
 			directoryEntry.getFile(path, {create: true}, function gotWriteFileEntry (fileEntry) {
 				fileEntry.createWriter(function gotWriter (writer) {
 					writer.onwriteend = function writeend (e) {
@@ -214,7 +242,7 @@ function API (message, response) {
 							});
 						}
 						catch (ex) {
-							error('Exception occured: ' + ex.message);
+							error(`Exception occured: ${ex.message}`);
 						}
 						finally {
 							writer = response = null;
@@ -222,7 +250,7 @@ function API (message, response) {
 					};
 
 					writer.onerror = function writeerror (e) {
-						error('Failed to write: ' + err.message);
+						error(`Failed to write: ${err.message}`);
 						writer = null;
 					};
 
@@ -235,18 +263,18 @@ function API (message, response) {
 							encoder = new TextEncoder(message.encoding || 'UTF-8');
 						}
 						catch (ex) {
-							return error('Unknown encoding: ' + message.encoding);
+							return error(`Unknown encoding: ${message.encoding}`);
 						}
 
 						writer.write(new Blob([encoder.encode(message.content)]));
 					}
 				},
 				function gotWriterError (err) {
-					error('Failed to retrieve file writer object: ' + err.message);
+					error(`Failed to retrieve file writer object: ${err.message}`);
 				});
 			},
 			function gotWriteFileEntryError (err) {
-				error('Failed to write: ' + err.message);
+				error(`Failed to write: ${err.message}`);
 			});
 			break;
 
@@ -276,6 +304,12 @@ function API (message, response) {
 			 *     ]
 			 * }
 			 */
+
+			if (!('path' in message)) {
+				return error('Missing path');
+			}
+
+			var path = getPath(message.path);
 
 			directoryEntry.getDirectory(path, {}, function gotDirectoryEntry (dirEntry) {
 				var reader = dirEntry.createReader();
@@ -314,7 +348,7 @@ function API (message, response) {
 							});
 						}
 						catch (ex) {
-							error('Exception occured: ' + ex.message);
+							error(`Exception occured: ${ex.message}`);
 						}
 						finally {
 							reader = response = null;
@@ -325,12 +359,116 @@ function API (message, response) {
 				readEntries();
 			},
 			function gotDirectoryEntryError (err) {
-				error('Failed to open the directory: ' + err.message);
+				error(`Failed to open the directory: ${err.message}`);
 			});
 			break;
 
+		case 'mv':
+			/*
+			 * request object: {
+			 *     command:  'mv',
+			 *     from:     '/path/to/source',
+			 *     to:       '/path/to/destination'
+			 * }
+			 *
+			 * response object: {
+			 *     to:       '/path/to/completed/destination'
+			 * }
+			 */
+
+			if (!('from' in message)) {
+				return error('Missing source path');
+			}
+
+			if (!('to' in message)) {
+				return error('Missing destination path');
+			}
+
+			(function () {
+				var from = getPath(message.from);
+				var to = getPath(message.to);
+				var toBasename = '';
+
+				// "to" has path + basename
+				if (/^(.*\/)([^\/]+)$/.exec(to)) {
+					to = RegExp.$1;
+					toBasename = RegExp.$2;
+				}
+				// "to" is directory
+				else if (to.substr(-1) == '/') {
+					toBasename = /[^\/]+$/.exec(from)[0];
+				}
+
+				console.log([
+					`      from: "${from}"`,
+					`        to: "${to}"`,
+					`toBasename: "${toBasename}"`
+				].join('\n'));
+
+				directoryEntry.getFile(from, {}, fromFileEntry => {
+					console.log('got file');
+					directoryEntry.getDirectory(to, {}, toDirEntry => {
+						console.log('got directory');
+						fromFileEntry.moveTo(
+							toDirEntry, toBasename,
+							() => {
+								console.log('moved');
+								response({
+									to: to + toBasename
+								});
+							},
+							err => {
+								error(`Failed to move the file: ${err.message}`);
+							}
+						);
+					}, err => {
+						error(`Failed to retrieve destination directory entry: ${err.message}`);
+					});
+				}, err => {
+					error(`Failed to retrieve source file entry: ${err.message}`);
+				});
+			})();
+			break;
+
+		case 'toLogicalPath':
+			/*
+			 * request object: {
+			 *     command:  'toLogicalPath',
+			 *     path:     '/absolute/path'
+			 * }
+			 *
+			 * response object: {
+			 *     logicalPath: '/logical/path'
+			 * }
+			 */
+
+			if (!('path' in message)) {
+				return error('Missing path');
+			}
+
+			(function () {
+				var result = message.path;
+
+				if (homePath == '') {
+					return error(`homePath is empty.`);
+				}
+
+				if (!/^([a-z]:)?[\\\/]/i.test(result)) {
+					return error(`"${result}" is not an absolute path.`);
+				}
+
+				if (result.indexOf(homePath) == 0) {
+					result = '/' + result.substring(homePath.length);
+				}
+
+				response({
+					logicalPath: result
+				});
+			})();
+			break;
+
 		default:
-			return error('Unknown command: "' + message.command + '"');
+			return error(`Unknown command: "${message.command}"`);
 		}
 	});
 

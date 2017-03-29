@@ -1,8 +1,9 @@
 {
 	"manifest_version": 2,
-	"name": "Local File Operator for wasavi",
-	"description": "Library application to operate local files for wasavi",
-	"version": "1.0.0",
+	"name": "__MSG_title__",
+	"description": "__MSG_description__",
+	"version": "1.1.0",
+	"default_locale": "en",
 	"icons": {
 		"16": "icon016.png",
 		"48": "icon048.png",

@@ -22,38 +22,43 @@
 <html>
 	<head>
 		<meta charset="UTF-8">
-		<title>Local File Operator for wasavi</title>
+		<title data-i18n="title">Local File Operator for wasavi</title>
 		<style>
 body {
 	background-color:#fff;
 	color:#000;
+	visibility:hidden;
 }
 h1 {
 	margin:0 0 8px 0;
 	padding:8px;
-	background-color:#333;
+	background-color:#666;
 	color:#fff;
 	line-height:1;
 	font-weight:bold;
 	font-size:large;
 }
 h2 {
-	margin: 0 0 4px 0;
+	margin:4em 0 8px 0;
 	color:#333;
 	line-height:1;
 	font-weight:bold;
 	font-size:medium;
 }
+h1 + h2 {
+	margin-top:0;
+}
+button {
+	white-space:nowrap;
+}
 #d1 {
 	margin:0 0 4px 0;
 	border:1px solid silver;
 	padding:4px;
-	color:silver;
+	color:#888;
+	background-color:#eee;
 	font-family:monospace;
 	font-size:x-large;
-}
-.test-row {
-	margin: 0 0 4px 0;
 }
 #t1 {
 	box-sizing:border-box;
@@ -63,18 +68,87 @@ h2 {
 	box-sizing:border-box;
 	width:100%;
 }
+#t3 {
+	margin:0 0 4px 0;
+	box-sizing:border-box;
+	width:100%;
+	font-family:monospace;
+	font-size:x-large;
+}
 #message {
-	margin:4px 0 0 0;
+	position:fixed;
+	bottom:0;
+	left:0;
+	right:0;
+	padding:2px 0 2px 0;
+	border-top:1px solid silver;
+	background-color:#fff;
 	font-size:medium;
-	color:blue;
+	line-height:1;
+	text-align:center;
+}
+.notice-table {
+	border:none;
+	width:100%;
+	border-collapse:collapse;
+}
+.notice-table td {
+	padding:0;
+	vertical-align:top;
+}
+.notice-table td:first-child {
+	padding-right:8px;
+}
+.test-row {
+	margin: 0 0 4px 0;
+}
+.notice {
+	font-size:small;
+	color:#888;
 }
 		</style>
 	</head>
 	<body>
-		<h1>Local File Operator for wasavi</h1>
-		<h2>Root path:</h2>
-		<div id="d1">N/A</div>
-		<button id="b1">Change...</button>
+		<h1 data-i18n="title">Local File Operator for wasavi</h1>
+		<h2 data-i18n="base_path">The local directory to export to Chrome browser:</h2>
+		<div id="d1" data-i18n="na">N/A</div>
+		<table class="notice-table">
+			<tr>
+				<td>
+					<button id="b1" data-i18n="change">Change...</button>
+				</td>
+				<td>
+					<div class="notice" data-i18n="base_path_notice">
+						Please select the directory to export to Chrome.
+						This directory becomes the root in the application.
+						Basically, this should be assigned your home directory itself
+						or any subfolder within your home directory.
+					</div>
+				</td>
+			</tr>
+		</table>
+		<h2 data-i18n="home_path">The absolute path to your home directory</h2>
+		<input type="text" id="t3">
+		<table class="notice-table">
+			<tr>
+				<td>
+					<button id="b2" data-i18n="update">Update</button>
+				</td>
+				<td>
+					<div class="notice">
+						<div data-i18n="home_path_notice">
+							Please input the absolute path to your home directory.
+							It is a string like:
+						</div>
+						<ul>
+							<li>Windows: <kbd>C:\Users\your-account/</kbd></li>
+							<li>Linux: <kbd>/home/your-account/</kbd></li>
+							<li>macOS: <kbd>/Users/your-account/</kbd></li>
+						</ul>
+					</div>
+				</td>
+			</tr>
+		</table>
 		<!--
 		<hr>
 		<div class="test-row"><label for="t1">path:</label><input id="t1" value="/home/akahuku/lfo-test.txt"></div>
