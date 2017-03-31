@@ -1,5 +1,5 @@
 /**
- * Local Filesystem Operator for wasavi
+ * Local Filesystem Operator
  * =============================================================================
  *
  *
@@ -27,9 +27,11 @@
 
 const ACCEPT_IDS = [
 	'dgogifpkoilgiofhhhodbodcfgomelhe',	// wasavi release version
-	'ebphjmhbacdkdgfchhjmhailogkehfob',	// wasavi develop version
-										// kokoni release version
-	'oakajieejajdhkjajeppjefenobcnklp'	// kokoni develop version
+	'ebphjmhbacdkdgfchhjmhailogkehfob',	// wasavi develop version on Xubuntu
+
+	'jblddojmjdpfeplbfbofdhchpdeacocl',	// kokoni release version
+	'oakajieejajdhkjajeppjefenobcnklp',	// kokoni develop version on Xubuntu
+	'jcfjjaanepfkmfmgkoificegekicfgpb'	// kokoni develop version on Windows
 ];
 
 /*
@@ -53,7 +55,7 @@ function getBasePath (callback) {
 				callback();
 			}
 			else {
-				callback(directoryEntry, values.homePath);
+				callback(directoryEntry, toInternalAbsolutePath(values.homePath));
 			}
 		});
 	});
@@ -72,6 +74,17 @@ function setHomePath (path) {
 global.setBasePath = setBasePath;
 global.getBasePath = getBasePath;
 global.setHomePath = setHomePath;
+
+/*
+ * private functions
+ */
+
+function toInternalAbsolutePath (homePath) {
+	// C:\path\to\home -> c:/path/to/home
+	return homePath
+		.replace(/^[A-Z]:/, $0 => $0.toLowerCase())
+		.replace(/\\/g, '/');
+}
 
 /*
  * launch handler
@@ -384,57 +397,46 @@ function API (message, response) {
 				return error('Missing destination path');
 			}
 
-			(function () {
-				var from = getPath(message.from);
-				var to = getPath(message.to);
-				var toBasename = '';
+			var from = getPath(message.from);
+			var to = getPath(message.to);
+			var toBasename = '';
 
-				// "to" has path + basename
-				if (/^(.*\/)([^\/]+)$/.exec(to)) {
-					to = RegExp.$1;
-					toBasename = RegExp.$2;
-				}
-				// "to" is directory
-				else if (to.substr(-1) == '/') {
-					toBasename = /[^\/]+$/.exec(from)[0];
-				}
+			// "to" has path + basename
+			if (/^(.*\/)([^\/]+)$/.exec(to)) {
+				to = RegExp.$1;
+				toBasename = RegExp.$2;
+			}
+			// "to" is directory
+			else if (to.substr(-1) == '/') {
+				toBasename = /[^\/]+$/.exec(from)[0];
+			}
 
-				console.log([
-					`      from: "${from}"`,
-					`        to: "${to}"`,
-					`toBasename: "${toBasename}"`
-				].join('\n'));
-
-				directoryEntry.getFile(from, {}, fromFileEntry => {
-					console.log('got file');
-					directoryEntry.getDirectory(to, {}, toDirEntry => {
-						console.log('got directory');
-						fromFileEntry.moveTo(
-							toDirEntry, toBasename,
-							() => {
-								console.log('moved');
-								response({
-									to: to + toBasename
-								});
-							},
-							err => {
-								error(`Failed to move the file: ${err.message}`);
-							}
-						);
-					}, err => {
-						error(`Failed to retrieve destination directory entry: ${err.message}`);
-					});
+			directoryEntry.getFile(from, {}, fromFileEntry => {
+				directoryEntry.getDirectory(to, {}, toDirEntry => {
+					fromFileEntry.moveTo(
+						toDirEntry, toBasename,
+						() => {
+							response({
+								to: to + toBasename
+							});
+						},
+						err => {
+							error(`Failed to move the file: ${err.message}`);
+						}
+					);
 				}, err => {
-					error(`Failed to retrieve source file entry: ${err.message}`);
+					error(`Failed to retrieve destination directory entry: ${err.message}`);
 				});
-			})();
+			}, err => {
+				error(`Failed to retrieve source file entry: ${err.message}`);
+			});
 			break;
 
 		case 'toLogicalPath':
 			/*
 			 * request object: {
 			 *     command:  'toLogicalPath',
-			 *     path:     '/absolute/path'
+			 *     path:     '/absolute/path' or 'Z:\absolute\path'
 			 * }
 			 *
 			 * response object: {
@@ -446,25 +448,23 @@ function API (message, response) {
 				return error('Missing path');
 			}
 
-			(function () {
-				var result = message.path;
+			if (homePath == '') {
+				return error(`homePath is empty.`);
+			}
 
-				if (homePath == '') {
-					return error(`homePath is empty.`);
-				}
+			var result = toInternalAbsolutePath(message.path);
 
-				if (!/^([a-z]:)?[\\\/]/i.test(result)) {
-					return error(`"${result}" is not an absolute path.`);
-				}
+			if (!/^([a-z]:)?\//.test(result)) {
+				return error(`"${result}" is not an absolute path.`);
+			}
 
-				if (result.indexOf(homePath) == 0) {
-					result = '/' + result.substring(homePath.length);
-				}
+			if (result.indexOf(homePath) == 0) {
+				result = '/' + result.substring(homePath.length);
+			}
 
-				response({
-					logicalPath: result
-				});
-			})();
+			response({
+				logicalPath: result
+			});
 			break;
 
 		default:

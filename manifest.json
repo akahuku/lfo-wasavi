@@ -1,6 +1,7 @@
 {
 	"manifest_version": 2,
 	"name": "__MSG_title__",
+	"short_name": "LFO",
 	"description": "__MSG_description__",
 	"version": "1.1.0",
 	"default_locale": "en",
