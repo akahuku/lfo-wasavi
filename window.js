@@ -25,7 +25,7 @@
 
 'use strict';
 
-const DEBUG = true;
+const DEBUG = false;
 
 function displayRootPath (dir) {
 	chrome.fileSystem.getDisplayPath(dir, path => {
