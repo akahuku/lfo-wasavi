@@ -5,7 +5,7 @@
 	@author akahuku@gmail.com
  -->
 <!--
-	Copyright 2016 akahuku, akahuku@gmail.com
+	Copyright 2016-2018 akahuku, akahuku@gmail.com
 	
 	Licensed under the Apache License, Version 2.0 (the "License");
 	you may not use this file except in compliance with the License.
@@ -51,6 +51,9 @@ h1 + h2 {
 button {
 	white-space:nowrap;
 }
+kbd i {
+	color:#04c;
+}
 #d1 {
 	margin:0 0 4px 0;
 	border:1px solid silver;
@@ -61,19 +64,25 @@ button {
 	font-size:x-large;
 }
 #t1 {
-	box-sizing:border-box;
-	width:100%;
-}
-#t2 {
-	box-sizing:border-box;
-	width:100%;
-}
-#t3 {
 	margin:0 0 4px 0;
 	box-sizing:border-box;
 	width:100%;
 	font-family:monospace;
 	font-size:x-large;
+}
+#td1 {
+	box-sizing:border-box;
+	width:100%;
+}
+#td2 {
+	box-sizing:border-box;
+	width:50%;
+	height:100px;
+}
+#td3 {
+	box-sizing:border-box;
+	width:50%;
+	height:100px;
 }
 #message {
 	position:fixed;
@@ -86,6 +95,7 @@ button {
 	font-size:medium;
 	line-height:1;
 	text-align:center;
+	white-space:pre-line;
 }
 .notice-table {
 	border:none;
@@ -128,7 +138,7 @@ button {
 			</tr>
 		</table>
 		<h2 data-i18n="home_path">The absolute path to your home directory</h2>
-		<input type="text" id="t3">
+		<input type="text" id="t1">
 		<table class="notice-table">
 			<tr>
 				<td>
@@ -141,20 +151,22 @@ button {
 							It is a string like:
 						</div>
 						<ul>
-							<li>Windows: <kbd>C:\Users\your-account/</kbd></li>
-							<li>Linux: <kbd>/home/your-account/</kbd></li>
-							<li>macOS: <kbd>/Users/your-account/</kbd></li>
+							<li>Windows: <kbd>C:\Users\<i>your-account</i>\</kbd></li>
+							<li>Linux: <kbd>/home/<i>your-account</i>/</kbd></li>
+							<li>macOS: <kbd>/Users/<i>your-account</i>/</kbd></li>
 						</ul>
 					</div>
 				</td>
 			</tr>
 		</table>
-		<!--
 		<hr>
-		<div class="test-row"><label for="t1">path:</label><input id="t1" value="/home/akahuku/lfo-test.txt"></div>
-		<div class="test-row"><textarea id="t2"></textarea></div>
-		<button id="button-save">save</button> <button id="button-load">load</button>
-		-->
+		<div class="test-row"><input id="td1" value="devel/lfo-wasavi/test/hello-world.txt" placeholder="path"></div>
+		<div class="test-row"><textarea id="td2" placeholder="content"></textarea><textarea id="td3" placeholder="response"></textarea></div>
+		<button id="button-read">read</button>
+		<button id="button-write">write</button>
+		<button id="button-writep">write with mkdir -p</button>
+		<button id="button-ls">ls</button>
+		<button id="button-mv">mv</button>
 		<div class="message" id="message"></div>
 		<script type="text/javascript" src="window.js"></script>
 	</body>

@@ -6,7 +6,7 @@
 		"message": "Library application which provides an API to operate local files"
 	},
 	"base_path": {
-		"message": "The local directory to export to Chrome browser:"
+		"message": "The local folder to export to Chrome browser:"
 	},
 	"na": {
 		"message": "N/A"
@@ -15,19 +15,19 @@
 		"message": "Change..."
 	},
 	"base_path_notice": {
-		"message": "Please select the directory to export to Chrome.  This directory becomes the root in the application.  Basically, this should be assigned your home directory itself or any subfolder within your home directory."
+		"message": "Please select the folder to export to Chrome.  This folder becomes the root in the application.  Basically, this should be assigned your home folder itself or any subfolder within your home folder."
 	},
 	"home_path": {
-		"message": "The absolute path to your home directory"
+		"message": "The absolute path to your home folder"
 	},
 	"update": {
 		"message": "Update"
 	},
 	"home_path_notice": {
-		"message": "Please input the absolute path to your home directory.  It is a string like:"
+		"message": "Please input the absolute path to your home folder.  It is a string like:"
 	},
 	"base_path_updated": {
-		"message": "\"$fullpath$\" has been registered as root directory.",
+		"message": "\"$fullpath$\" has been registered as root folder.",
 		"placeholders": {
 			"fullpath": {
 				"content": "$1"
@@ -35,6 +35,6 @@
 		}
 	},
 	"home_path_updated": {
-		"message": "Path to your home directory has been updated."
+		"message": "Path to your home folder has been updated."
 	}
 }

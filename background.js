@@ -6,7 +6,7 @@
  * @author akahuku@gmail.com
  */
 /**
- * Copyright 2017 akahuku, akahuku@gmail.com
+ * Copyright 2017-2018 akahuku, akahuku@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,13 +25,19 @@
 
 'use strict';
 
+const EXTENSION_ID_RELEASE = 'dkbdmkncpnepdbaneikhbbeiboehjnol';
+const IS_RELEASE_VERSION = chrome.runtime.id == EXTENSION_ID_RELEASE;
+
 const ACCEPT_IDS = [
 	'dgogifpkoilgiofhhhodbodcfgomelhe',	// wasavi release version
 	'ebphjmhbacdkdgfchhjmhailogkehfob',	// wasavi develop version on Xubuntu
 
 	'jblddojmjdpfeplbfbofdhchpdeacocl',	// kokoni release version
 	'oakajieejajdhkjajeppjefenobcnklp',	// kokoni develop version on Xubuntu
-	'jcfjjaanepfkmfmgkoificegekicfgpb'	// kokoni develop version on Windows
+	'jcfjjaanepfkmfmgkoificegekicfgpb',	// kokoni develop version on Windows
+
+	'gjbboehfbnlimbdpljoegcgoidokacno',	// akahukuplus release version
+	'dhhlpndnaddibflgbafalbefkcnedhhp' 	// akahukuplus develop version on Xubuntu
 ];
 
 /*
@@ -39,7 +45,7 @@ const ACCEPT_IDS = [
  */
 
 function setBasePath (directoryEntry) {
-	var basePath = chrome.fileSystem.retainEntry(directoryEntry);
+	const basePath = chrome.fileSystem.retainEntry(directoryEntry);
 	chrome.storage.local.set({'basePath': basePath});
 }
 
@@ -96,7 +102,7 @@ chrome.app.runtime.onLaunched.addListener(data => {
 		{
 			outerBounds: {
 				width: 800,
-				height: 400
+				height: IS_RELEASE_VERSION ? 400 : 640
 			}
 		}
 	);
@@ -107,355 +113,437 @@ chrome.app.runtime.onLaunched.addListener(data => {
  */
 
 function API (message, response) {
-	function error (message) {
-		if (chrome.runtime.lastError) {
-			message += ` (${chrome.runtime.lastError.message})`;
-		}
+	getBasePath((directoryEntry, homePath) => {
+		function error () {
+			let errorMessages = Array.prototype.map.call(arguments, arg => {
+				if (arg instanceof Error) {
+					console.error(arg.stack || arg.message);
+					return arg.message;
+				}
+				else {
+					return arg;
+				}
+			});
 
-		response({error: message});
-		response = null;
-		console.error(message);
-	}
-
-	function getPath (path) {
-		return path.replace(/^\//, '');
-	}
-
-	getBasePath(function gotBasePath (directoryEntry, homePath) {
-		if (!directoryEntry) {
-			return error('Missing root directory');
-		}
-
-		if (!homePath) {
-			return error('Missing home path');
-		}
-
-		switch (message.command) {
-		case 'read':
-			/*
-			 * request object: {
-			 *     command:  'read',
-			 *     path:     '/path/to/file',
-			 *     type:     'arraybuffer' OR-ELSE  [optional]
-			 *     encoding: 'encoding name',       [optional]
-			 * }
-			 *
-			 * response object: {
-			 *     path:    '/path/to/file',
-			 *     name:    'basename-of-this-file',
-			 *     content: CONTENT, <STRING> OR <ARRAYBUFFER>
-			 * }
-			 */
-
-			if (!('path' in message)) {
-				return error('Missing path');
+			if (chrome.runtime.lastError) {
+				let lastError = chrome.runtime.lastError.errorMessage;
+				console.error(lastError);
+				errorMessages.unshift(`runtime error: ${lastError}`);
 			}
 
-			var path = getPath(message.path);
+			let errorMessage = errorMessages.join('\n');
+			response({error: errorMessage});
+			response = null;
+		}
 
-			directoryEntry.getFile(path, {}, function gotReadFileEntry (fileEntry) {
-				fileEntry.file(function gotFile (file) {
-					var reader = new FileReader;
+		function getPath (path) {
+			return path
+				.replace(/\\/g, '/')
+				.replace(/^\s*(?:[a-z]:)?\//i, '');
+		}
 
-					reader.onloadend = function loadend (e) {
-						function gotMetadata (metadata) {
+		function fixFullPath (fullPath) {
+			// Chrome's implementation has a bug that
+			// fileEntry#fullPath contains the parent
+			// directory name of root.
+			//
+			// root: /home/akahuku
+			// logical path: /foo/bar/baz.txt
+			// fileEntry#fullPath: /akahuku/foo/bar/baz.txt
+			//
+			// so we have to strip the first path component.
+			return fullPath.replace(/^\/[^\/]+\/?/, '/');
+		}
+
+		function getDirectoryPromise (path, options) {
+			return new Promise((resolve, reject) => {
+				directoryEntry.getDirectory(path, options || {},
+					dirEntry => {resolve(dirEntry)},
+					error => {reject(new Error(`Failed to retrieve directory object for "${path}"\n${error.message}`))}
+				);
+			});
+		}
+
+		function getFilePromise (path, options) {
+			return new Promise((resolve, reject) => {
+				directoryEntry.getFile(path, options || {},
+					fileEntry => {resolve(fileEntry)},
+					error => {reject(new Error(`Failed to retrieve file entry object for "${path}"\n${error.message}`))}
+				);
+			});
+		}
+
+		function getFileReaderPromise (fileEntry) {
+			return new Promise((resolve, reject) => {
+				fileEntry.file(
+					file => {resolve(file)},
+					error => {reject(new Error(`Failed to retrieve file object for "${fileEntry.fullPath}"\n${error.message}`))}
+				);
+			}).then(file => {
+				return new Promise((resolve, reject) => {
+					let reader = new FileReader;
+					reader.onloadend = e => {resolve(e)};
+					reader.onerror = error => {reject(new Error(`Failed to retrieve file reader object for "${fileEntry.fullPath}"\n${error.message}`))};
+					reader.readAsArrayBuffer(file);
+				});
+			});
+		}
+
+		function getFileMetadataPromise (fileEntry) {
+			return new Promise((resolve, reject) => {
+				fileEntry.getMetadata(
+					metadata => {resolve(metadata)},
+					error => {reject(new Error(`Failed to retrieve metadata object for "${fileEntry.fullPath}"\n${error.message}`))}
+				);
+			});
+		}
+
+		function getFileWriterPromise (fileEntry, content) {
+			return new Promise((resolve, reject) => {
+				fileEntry.createWriter(
+					writer => {
+						writer.onwriteend = e => {resolve(e)};
+						writer.onerror = error => {reject(new Error(`Failed to update file contents for "${fileEntry.fullPath}"\n${error.message}`))};
+						writer.write(content);
+					},
+					error => {reject(new Error(`Failed to retrieve file writer object for "${fileEntry.fullPath}"\n${error.message}`))}
+				);
+			});
+		}
+
+		function getBlobFromURLPromise (dataUrl) {
+			return new Promise((resolve, reject) => {
+				let transport = new XMLHttpRequest;
+				transport.onload = e => {resolve(transport.response)};
+				transport.onerror = error => {reject(new Error(`Failed to retrieve blob object for "${fileEntry.fullPath}"\n${error.message}`))};
+				transport.open('GET', dataUrl);
+				transport.responseType = 'blob';
+				transport.send();
+			});
+		}
+
+		/*
+		 * request object: {
+		 *     command:  'read',
+		 *     path:     '/path/to/file',
+		 *     type:     'arraybuffer' OR-ELSE  [optional]
+		 *     encoding: 'encoding name',       [optional]
+		 * }
+		 *
+		 * response object: {
+		 *     path:         '/path/to/file',
+		 *     name:         'basename-of-this-file',
+		 *     content:      CONTENT, <STRING> OR <ARRAYBUFFER>,
+		 *     lastModified: UNIX TIMESTAMP USECS, <NUMBER>
+		 *     bytes:        SIZE IN BYTES, <NUMBER>
+		 * }
+		 */
+
+		function read (message) {
+			if (!('path' in message)) {
+				throw new Error('Missing path');
+			}
+
+			if (message.path == '') {
+				throw new Error('path is empty');
+			}
+
+			let path = getPath(message.path);
+
+			return getFilePromise(path).then(fileEntry => {
+				return getFileReaderPromise(fileEntry).then(e => {
+					return getFileMetadataPromise(fileEntry).then(metadata => {
+						let payload = {
+							path: fixFullPath(fileEntry.fullPath),
+							name: fileEntry.name,
+							content: e.target.result
+						};
+
+						if (message.type != 'arraybuffer') {
+							let decoder;
 							try {
-								var payload = {
-									path: path,
-									name: fileEntry.name,
-									content: reader.result
-								};
-
-								if (message.type != 'arraybuffer') {
-									var decoder;
-									try {
-										decoder = new TextDecoder(message.encoding || 'UTF-8');
-									}
-									catch (ex) {
-										return error(`Unknown encoding: ${message.encoding}`);
-									}
-									payload.content = decoder.decode(payload.content);
-								}
-
-								if (!(metadata instanceof DOMError)) {
-									if ('modificationTime' in metadata) {
-										payload.lastModified = metadata.modificationTime.getTime();
-									}
-
-									if ('size' in metadata) {
-										payload.size = metadata.size;
-									}
-								}
-
-								response(payload);
+								decoder = new TextDecoder(message.encoding || 'UTF-8');
 							}
 							catch (ex) {
-								error(`Exception occured: ${ex.message}`);
+								throw new Error(`Unknown encoding: ${message.encoding}`);
 							}
-							finally {
-								reader = response = null;
-							}
+							payload.content = decoder.decode(payload.content);
 						}
 
-						fileEntry.getMetadata(gotMetadata, gotMetadata);
-					};
+						if ('modificationTime' in metadata) {
+							payload.lastModified = metadata.modificationTime.getTime();
+						}
 
-					reader.onerror = function loaderror (err) {
-						error(`Failed to read: ${err.message}`);
-						reader = null;
-					};
+						if ('size' in metadata) {
+							payload.bytes = metadata.size;
+						}
 
-					reader.readAsArrayBuffer(file);
-				},
-				function gotFileError (err) {
-					error(`Failed to retrieve file representation object: ${err.message}`);
+						response(payload);
+					});
 				});
-			},
-			function gotReadFileEntryError (err) {
-				error(`Failed to read: ${err.message}`);
+			}).catch(err => {
+				error('Failed to read:', err);
 			});
-			break;
+		}
 
-		case 'write':
-			/*
-			 * request object: {
-			 *     command:  'write',
-			 *     path:     '/path/to/file',
-			 *     content:  <STRING> OR <ARRAYBUFFER>,
-			 *     encoding: 'encoding name'        [optional]
-			 * }
-			 *
-			 * response object: {
-			 *     path:    '/path/to/file',
-			 *     name:    'basename-of-this-file',
-			 *     content: SIZE IN BYTES, <NUMBER>
-			 * }
-			 */
+		/*
+		 * request object: {
+		 *     command:  'write',
+		 *     path:     '/path/to/file',
+		 *     content:  <STRING> OR <ARRAYBUFFER>,
+		 *     type:     'url' OR-ELSE          [optional]
+		 *     encoding: 'encoding name'        [optional]
+		 * }
+		 *
+		 * response object: {
+		 *     path:  '/path/to/file',
+		 *     name:  'basename-of-this-file',
+		 *     bytes: SIZE IN BYTES, <NUMBER>
+		 * }
+		 */
 
+		function write (message) {
 			if (!('path' in message)) {
-				return error('Missing path');
+				throw new Error('Missing path');
 			}
 			if (!('content' in message)) {
-				return error('Missing content');
+				throw new Error('Missing content');
 			}
 
-			var path = getPath(message.path);
+			let path = getPath(message.path);
+			let fileEntry;
 
-			directoryEntry.getFile(path, {create: true}, function gotWriteFileEntry (fileEntry) {
-				fileEntry.createWriter(function gotWriter (writer) {
-					writer.onwriteend = function writeend (e) {
-						try {
-							writer.onwriteend = null;
-							writer.truncate(e.total);
+			return getFilePromise(path, {create: true})
+			.then(f => {
+				fileEntry = f;
 
-							response({
-								path: path,
-								name: fileEntry.name,
-								size: e.total
-							});
-						}
-						catch (ex) {
-							error(`Exception occured: ${ex.message}`);
-						}
-						finally {
-							writer = response = null;
-						}
-					};
+				if ('type' in message && message.type == 'url') {
+					return getBlobFromURLPromise(message.content);
+				}
 
-					writer.onerror = function writeerror (e) {
-						error(`Failed to write: ${err.message}`);
-						writer = null;
-					};
+				let encoder;
+				try {
+					encoder = new TextEncoder(message.encoding || 'UTF-8');
+				}
+				catch (ex) {
+					throw new Error(`Unknown encoding: ${message.encoding}`);
+				}
 
-					if (message instanceof ArrayBuffer) {
-						writer.write(new Blob([message.content]));
-					}
-					else {
-						var encoder;
-						try {
-							encoder = new TextEncoder(message.encoding || 'UTF-8');
-						}
-						catch (ex) {
-							return error(`Unknown encoding: ${message.encoding}`);
-						}
+				return new Blob([encoder.encode(message.content)])
+			}).then(content => {
+				return getFileWriterPromise(fileEntry, content).then(e => {
+					e.target.truncate(e.total);
 
-						writer.write(new Blob([encoder.encode(message.content)]));
-					}
-				},
-				function gotWriterError (err) {
-					error(`Failed to retrieve file writer object: ${err.message}`);
+					response({
+						path: fixFullPath(fileEntry.fullPath),
+						name: fileEntry.name,
+						lastModified: Date.now(),
+						bytes: e.total
+					});
 				});
-			},
-			function gotWriteFileEntryError (err) {
-				error(`Failed to write: ${err.message}`);
+			}).catch(err => {
+				error('Failed to write:', err);
 			});
-			break;
+		}
 
-		case 'ls':
-			/*
-			 * request object: {
-			 *     command:  'ls',
-			 *     path:     '/path/to/directory'
-			 * }
-			 *
-			 * response object: {
-			 *     path:    '/path/to/directory',
-			 *     name:    'basename-of-this-directory',
-			 *     entries: [
-			 *         {
-			 *             name:       'basename-of-this-file',,
-			 *             size:       '',
-			 *             bytes:      <NUMBER>,
-			 *             path:       '/path/to/file',
-			 *             is_dir:     <BOOLEAN>
-			 *             is_deleted: false,
-			 *             id:         null,
-			 *             modified:   null,
-			 *             created:    null,
-			 *             mime_type:  'application/octet-stream'
-			 *         }, ...
-			 *     ]
-			 * }
-			 */
-
+		function writep (message) {
 			if (!('path' in message)) {
-				return error('Missing path');
+				throw new Error('Missing path');
+			}
+			if (!('content' in message)) {
+				throw new Error('Missing content');
 			}
 
-			var path = getPath(message.path);
+			let components = getPath(message.path).split('/');
+			let basename = components.pop();
+			let currentPath = [];
+			let p = components.reduce((seq, component) => {
+				currentPath.push(component);
+				let path = currentPath.join('/');
+				return seq.then(_ => getDirectoryPromise(path, {create:true}));
+			}, Promise.resolve());
 
-			directoryEntry.getDirectory(path, {}, function gotDirectoryEntry (dirEntry) {
-				var reader = dirEntry.createReader();
-				var entries = [];
+			p.then(() => {
+				currentPath.push(basename);
+				let writeMessage = Object.assign({}, message);
+				writeMessage.command = 'write';
+				return write(writeMessage);
+			}).catch(err => {
+				error('Failed to writep:', err);
+			});
+
+			return p;
+		}
+
+		/*
+		 * request object: {
+		 *     command:  'ls',
+		 *     path:     '/path/to/directory'
+		 * }
+		 *
+		 * response object: {
+		 *     path:    '/path/to/directory',
+		 *     name:    'basename-of-this-directory',
+		 *     entries: [
+		 *         {
+		 *             name:         'basename-of-this-file',,
+		 *             bytes:        <NUMBER>,
+		 *             path:         '/path/to/file',
+		 *             is_dir:       <BOOLEAN>
+		 *             is_deleted:   false,
+		 *             id:           null,
+		 *             lastModified: null,
+		 *             created:      null,
+		 *             mime_type:    'application/octet-stream'
+		 *         }, ...
+		 *     ]
+		 * }
+		 */
+
+		function ls (message) {
+			if (!('path' in message)) {
+				throw new Error('Missing path');
+			}
+
+			let path = getPath(message.path);
+
+			return getDirectoryPromise(path).then(dirEntry => {
+				let reader = dirEntry.createReader();
+				let entries = [];
 
 				function readEntries () {
-					reader.readEntries(function (subEntries) {
+					reader.readEntries(subEntries => {
 						if (subEntries.length) {
 							entries.push.apply(entries, subEntries);
 							return readEntries();
 						}
 
-						try {
-							entries = entries.sort(function (a, b) {
-								return a.name.localeCompare(b.name);
-							})
-							.map(function (entry) {
-								return {
-									name:       entry.name,
-									size:       '',
-									bytes:      0,
-									path:       ('/' + path + '/' + entry.name).replace(/\/{2,}/, '/'),
-									is_dir:     entry.isDirectory,
-									is_deleted: false,
-									id:         null,
-									modified:   null,
-									created:    null,
-									mime_type:  'application/octet-stream'
-								};
-							});
+						entries = entries
+						.sort((a, b) => a.name.localeCompare(b.name))
+						.map(entry => {
+							return {
+								name:         entry.name,
+								bytes:        0,
+								path:         fixFullPath(entry.fullPath),
+								is_dir:       entry.isDirectory,
+								is_deleted:   false,
+								id:           null,
+								lastModified: null,
+								created:      null,
+								mime_type:    'application/octet-stream'
+							};
+						});
 
-							response({
-								path: path,
-								name: dirEntry.name,
-								entries: entries
-							});
-						}
-						catch (ex) {
-							error(`Exception occured: ${ex.message}`);
-						}
-						finally {
-							reader = response = null;
-						}
+						response({
+							path: fixFullPath(dirEntry.fullPath),
+							name: dirEntry.name,
+							entries: entries
+						});
 					});
 				}
 
 				readEntries();
-			},
-			function gotDirectoryEntryError (err) {
-				error(`Failed to open the directory: ${err.message}`);
+			}).catch(err => {
+				error('Failed to ls:', err);
 			});
-			break;
+		}
 
-		case 'mv':
-			/*
-			 * request object: {
-			 *     command:  'mv',
-			 *     from:     '/path/to/source',
-			 *     to:       '/path/to/destination'
-			 * }
-			 *
-			 * response object: {
-			 *     to:       '/path/to/completed/destination'
-			 * }
-			 */
+		/*
+		 * request object: {
+		 *     command:  'mv',
+		 *     from:     '/path/to/source',
+		 *     to:       '/path/to/destination'
+		 * }
+		 *
+		 * response object: {
+		 *     to:       '/path/to/completed/destination'
+		 * }
+		 */
 
+		function mv (message) {
 			if (!('from' in message)) {
-				return error('Missing source path');
+				throw new Error('Missing source path');
 			}
 
 			if (!('to' in message)) {
-				return error('Missing destination path');
+				throw new Error('Missing destination path');
 			}
 
-			var from = getPath(message.from);
-			var to = getPath(message.to);
-			var toBasename = '';
+			let fromFileName = getPath(message.from);
+			let toDirName = getPath(message.to);
+			let toBasename = '';
 
-			// "to" has path + basename
-			if (/^(.*\/)([^\/]+)$/.exec(to)) {
-				to = RegExp.$1;
+			// "toDirName" has path + basename
+			//
+			// eg. /path/to/destination.txt
+			if (/^(.*\/)([^\/]+)$/.exec(toDirName)) {
+				toDirName = RegExp.$1;
 				toBasename = RegExp.$2;
 			}
-			// "to" is directory
-			else if (to.substr(-1) == '/') {
-				toBasename = /[^\/]+$/.exec(from)[0];
+			// "toDirName" is directory: pick up basename from source path
+			//
+			// eg. '/path/to/destination/'
+			// eg. '/'
+			// eg. ''
+			else if (toDirName.substr(-1) == '/' || toDirName == '') {
+				toBasename = /[^\/]+$/.exec(fromFileName)[0];
 			}
 
-			directoryEntry.getFile(from, {}, fromFileEntry => {
-				directoryEntry.getDirectory(to, {}, toDirEntry => {
-					fromFileEntry.moveTo(
-						toDirEntry, toBasename,
-						() => {
-							response({
-								to: to + toBasename
-							});
-						},
-						err => {
-							error(`Failed to move the file: ${err.message}`);
-						}
-					);
-				}, err => {
-					error(`Failed to retrieve destination directory entry: ${err.message}`);
-				});
-			}, err => {
-				error(`Failed to retrieve source file entry: ${err.message}`);
+			return Promise.all([
+				getFilePromise(fromFileName),
+				getDirectoryPromise(toDirName)
+			]).then(values => {
+				let fromFileEntry = values[0];
+				let toDirEntry = values[1];
+
+				fromFileEntry.moveTo(
+					toDirEntry, toBasename,
+					() => {
+						response({
+							to: toDirName + toBasename
+						});
+					},
+					err => {
+						throw new Error(`Failed to move the file\n${err.message}`);
+					}
+				);
+			}).catch(err => {
+				error('Failed to mv:', err);
 			});
-			break;
+		}
 
-		case 'toLogicalPath':
-			/*
-			 * request object: {
-			 *     command:  'toLogicalPath',
-			 *     path:     '/absolute/path' or 'Z:\absolute\path'
-			 * }
-			 *
-			 * response object: {
-			 *     logicalPath: '/logical/path'
-			 * }
-			 */
+		/*
+		 * request object: {
+		 *     command:  'toLogicalPath',
+		 *     path:     '/absolute/path' or 'Z:\absolute\path'
+		 * }
+		 *
+		 * response object: {
+		 *     logicalPath: '/logical/path'
+		 * }
+		 *
+		 * This command converts an absolute path on the local file system
+		 * to logical path on the chrome-app's file system.
+		 *
+		 * homePath: "/home/akahuku/"
+		 * argument: "/home/akahuku/pictures/foo.jpg"
+		 *            ^^^^^^^^^^^^^ strip
+		 *   result: "/pictures/foo.jpg"
+		 */
 
+		function toLogicalPath (message) {
 			if (!('path' in message)) {
-				return error('Missing path');
+				throw new Error('Missing path');
 			}
 
 			if (homePath == '') {
-				return error(`homePath is empty.`);
+				throw new Error('homePath is empty.');
 			}
 
-			var result = toInternalAbsolutePath(message.path);
+			let result = toInternalAbsolutePath(message.path);
 
 			if (!/^([a-z]:)?\//.test(result)) {
-				return error(`"${result}" is not an absolute path.`);
+				throw new Error(`"${result}" is not an absolute path.`);
 			}
 
 			if (result.indexOf(homePath) == 0) {
@@ -465,10 +553,34 @@ function API (message, response) {
 			response({
 				logicalPath: result
 			});
-			break;
+		}
 
-		default:
-			return error(`Unknown command: "${message.command}"`);
+		let commandMap = {
+			read: read,
+			write: write,
+			writep: writep,
+			ls: ls,
+			mv: mv,
+			toLogicalPath: toLogicalPath
+		};
+
+		try {
+			if (!directoryEntry) {
+				throw new Error('Missing root directory');
+			}
+
+			if (!homePath) {
+				throw new Error('Missing home path');
+			}
+
+			if (!(message.command in commandMap)) {
+				throw new Error(`Unknown command: "${message.command}"`);
+			}
+
+			commandMap[message.command](message);
+		}
+		catch (ex) {
+			error(ex);
 		}
 	});
 
@@ -479,7 +591,7 @@ function API (message, response) {
  * message event handlers
  */
 
-chrome.runtime.onMessageExternal.addListener(function (messageExternal, sender, response) {
+chrome.runtime.onMessageExternal.addListener((messageExternal, sender, response) => {
 	if (ACCEPT_IDS.indexOf(sender.id) < 0) {
 		response({error: 'Forbidden'});
 		return;
@@ -488,7 +600,7 @@ chrome.runtime.onMessageExternal.addListener(function (messageExternal, sender, 
 	return API(messageExternal, response);
 });
 
-chrome.runtime.onMessage.addListener(function (message, sender, response) {
+chrome.runtime.onMessage.addListener((message, sender, response) => {
 	return API(message, response);
 });
 
@@ -497,27 +609,27 @@ chrome.runtime.onMessage.addListener(function (message, sender, response) {
  */
 
 /*
-chrome.app.runtime.onRestarted.addListener(function () {
+chrome.app.runtime.onRestarted.addListener(() => {
 	console.log('chrome.app.runtime.onRestarted fired');
 });
 
-chrome.runtime.onStartup.addListener(function () {
+chrome.runtime.onStartup.addListener(() => {
 	console.log('chrome.runtime.onStartup fired');
 });
 
-chrome.runtime.onInstalled.addListener(function () {
+chrome.runtime.onInstalled.addListener(() => {
 	console.log('chrome.runtime.onInstalled fired');
 });
 
-chrome.runtime.onSuspend.addListener(function () {
+chrome.runtime.onSuspend.addListener(() => {
 	console.log('chrome.runtime.onSuspend fired');
 });
 
-chrome.runtime.onConnect.addListener(function (port) {
+chrome.runtime.onConnect.addListener((port) => {
 	console.log('chrome.runtime.onConnect fired');
 });
 
-chrome.runtime.onConnectExternal.addListener(function (port) {
+chrome.runtime.onConnectExternal.addListener((port) => {
 	console.log('chrome.runtime.onConnectExternal fired');
 });
 
